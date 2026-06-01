@@ -26,6 +26,8 @@ import com.google.android.gms.ads.AdView;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.firestore.FieldValue;
 import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.firestore.ListenerRegistration;
+import com.google.firebase.firestore.QuerySnapshot;
 import com.inout.app.databinding.FragmentEmployeeCheckinBinding;
 import com.inout.app.models.AttendanceRecord;
 import com.inout.app.models.CompanyConfig;
@@ -60,6 +62,10 @@ public class EmployeeCheckInFragment extends Fragment {
     private User currentUser;
     private CompanyConfig assignedLocation;
     private AttendanceRecord todayRecord;
+
+    // Class-level registrations to manage listener lifecycles and prevent lag [2]
+    private ListenerRegistration userListenerRegistration;
+    private ListenerRegistration attendanceListenerRegistration;
 
     // Time checker thread variables to avoid stagnant UI gates [2]
     private final Handler timeHandler = new Handler(Looper.getMainLooper());
@@ -120,9 +126,15 @@ public class EmployeeCheckInFragment extends Fragment {
     private void loadUserDataAndStatus() {
         if (mAuth.getCurrentUser() == null) return;
         String uid = mAuth.getCurrentUser().getUid();
+
+        // Safely detach previous user listener if active [2]
+        if (userListenerRegistration != null) {
+            userListenerRegistration.remove();
+        }
         
-        db.collection("users").document(uid).addSnapshotListener((doc, error) -> {
+        userListenerRegistration = db.collection("users").document(uid).addSnapshotListener((doc, error) -> {
             if (error != null) return;
+            if (binding == null) return; // Safety check [2]
             
             if (doc != null && doc.exists()) {
                 currentUser = doc.toObject(User.class);
@@ -270,7 +282,13 @@ public class EmployeeCheckInFragment extends Fragment {
         String dateId = TimeUtils.getCurrentDateId();
         String recordId = currentUser.getEmployeeId() + "_" + dateId;
 
-        db.collection("attendance").document(recordId).addSnapshotListener((snapshot, e) -> {
+        // Safely detach previous attendance listener to prevent redundant background duplicates [2]
+        if (attendanceListenerRegistration != null) {
+            attendanceListenerRegistration.remove();
+        }
+
+        attendanceListenerRegistration = db.collection("attendance").document(recordId).addSnapshotListener((snapshot, e) -> {
+            if (binding == null) return; // Safety check [2]
             if (snapshot != null && snapshot.exists()) {
                 todayRecord = snapshot.toObject(AttendanceRecord.class);
             } else {
@@ -289,7 +307,7 @@ public class EmployeeCheckInFragment extends Fragment {
         if (todayRecord == null || (todayRecord.getCheckInTime() == null && todayRecord.isResumeRequested())) {
             
             boolean isTimeReached = TimeUtils.isTimeReached(shiftStart);
-            boolean isPastGrace = TimeUtils.isPastGracePeriod(shiftStart, 2); // 2-minute strict limit check [3]
+            boolean isPastGrace = TimeUtils.isPastGracePeriod(shiftStart, 2); // 2-minute late checking [3]
             boolean isResumeMode = todayRecord != null && todayRecord.isResumeRequested();
 
             if (isResumeMode) {
@@ -552,6 +570,15 @@ public class EmployeeCheckInFragment extends Fragment {
 
     @Override
     public void onDestroyView() {
+        // Safe lifecycle cleanup: Remove active listeners before clearing references [2]
+        if (userListenerRegistration != null) {
+            userListenerRegistration.remove();
+            userListenerRegistration = null;
+        }
+        if (attendanceListenerRegistration != null) {
+            attendanceListenerRegistration.remove();
+            attendanceListenerRegistration = null;
+        }
         if (mAdView != null) mAdView.destroy();
         super.onDestroyView();
         binding = null;
