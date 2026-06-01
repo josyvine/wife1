@@ -45,6 +45,7 @@ import java.util.Map;
  */
 public class EmployeeDashboardActivity extends AppCompatActivity {
 
+    private static final String TAG = "EmployeeDashboardActivity"; // FIXED: Missing variable declared [3]
     private ActivityEmployeeDashboardBinding binding;
     private FirebaseAuth mAuth;
     private FirebaseFirestore db;
