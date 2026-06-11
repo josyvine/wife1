@@ -45,12 +45,21 @@ public class ChartPattern {
     public static class Point {
         private int index;
         private double price;
+        private long timestamp; // Added to support Temporal Stabilization
 
         public Point() {}
 
         public Point(int index, double price) {
             this.index = index;
             this.price = price;
+            this.timestamp = 0L; // Fallback default
+        }
+
+        // Overloaded constructor to support native timestamp assignments
+        public Point(int index, double price, long timestamp) {
+            this.index = index;
+            this.price = price;
+            this.timestamp = timestamp;
         }
 
         public int getIndex() {
@@ -67,6 +76,14 @@ public class ChartPattern {
 
         public void setPrice(double price) {
             this.price = price;
+        }
+
+        public long getTimestamp() {
+            return timestamp;
+        }
+
+        public void setTimestamp(long timestamp) {
+            this.timestamp = timestamp;
         }
     }
 
